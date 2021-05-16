@@ -20,8 +20,12 @@ library(tidyverse)
 library(lubridate)
 # library(stringi)
 
+# Lectura
+library(xml2)
+
 # Gráficos
 library(plotly)
+library(htmltidy)
 
 # Conflictos
 conflict_prefer("filter", "dplyr")
@@ -40,18 +44,20 @@ files_directory <- here("data")
 file_list <- tibble(path = list.files(files_directory, full.names = TRUE)) %>% 
   mutate(name = basename(path),
          parts = map(name, ~ {
-           capture <- str_match(.x, "([0-9]{8})_([0-9]{6})_\\w+_\\w+_(\\w+)_\\w+\\.\\w+")
+           capture <- str_match(.x, "([0-9]{8})_([0-9]{6})_[^_]+_[^_]+_([^_]+)(?:_[^_]+)?\\.(\\w+)")
            tibble(last_date = capture[1, 2],
                   other = capture[1, 3],
-                  account = capture[1, 4])
+                  account = capture[1, 4],
+                  type = capture[1, 5])
          })) %>% 
   unnest(parts) %>% 
   mutate(last_date = ymd(last_date),
          account = factor(account))
 
 
-# Lectura de datos
+# Lectura de datos (csv)
 data <- file_list %>% 
+  filter(type == "csv") %>% 
   mutate(data = map(path, ~ {
     read_delim(.x, delim = ",", skip = 1, locale = locale(decimal_mark = ",", grouping_mark = "."),
                    col_names = c("Date", "Transaction ID", "Number", "Description", "Notes", "Commodity/Currency", 
@@ -77,109 +83,216 @@ data <- file_list %>%
     )) })) %>% 
   unnest(cols = c(data))
 
+# Lectura de datos (xml)
+fil <- file_list$path[4]
+f <- read_xml(fil, encoding = "utf-8")
+ns <- xml_ns(f)
+
+books <- xml_find_all(f, ".//gnc:book")
+book <- books[1]
+xml_find_all(book, ".//book:id", ns) # ID
+xml_find_all(book, ".//gnc:count-data", ns) # Basic numbers
 
 
-## ------------ Limpieza ------------
+         
+## ------------------------------------------------------
+## ------------ Limpieza y procesado inicial ------------
+## ------------------------------------------------------
 
-# TODO: ERROR si hay más de dos iguales -> slice(74,75)
-# TODO: Automatizar checkeo de 4 iguales, son entradas repetidas
-# Pares de movimientos
-data <- data %>% 
-  mutate(eq = if_else(`Amount Num` == -lead(`Amount Num`), 
-                                           rep(TRUE, length(`Amount Num`)), 
-                                           rep(FALSE, length(`Amount Num`))),
-         gr = cumsum(eq),
-         movement_tipe = c("TRUE" = "Primary", "FALSE" = "Secondary")[as.character(eq)])
+# Metadatos del libro
+tribble(~ Dato, ~ Valor, ~ Descripcion,
+        "Dinero", xml_find_all(book, './gnc:count-data[@cd:type="commodity"]') %>% xml_text(), "Numero de monedas usadas",
+        "Cuentas", xml_find_all(book, './gnc:count-data[@cd:type="account"]') %>% xml_text(), "Numero de cuentas creadas",
+        "Transacciones", xml_find_all(book, './gnc:count-data[@cd:type="transaction"]') %>% xml_text(), "Numero de movimientos"
+)
+# Metadastos de las divisas
+xml_find_all(book, ".//gnc:commodity", ns) %>% 
+  imap_dfr(~tibble(Id = .y,
+                   ISO = xml_find_first(.x, "./cmdty:space", ns) %>% xml_text(),
+                   Divisa = xml_find_first(.x, "./cmdty:id", ns) %>% xml_text()
+  ))
 
-# Aunar datos
-data <- data %>% 
-  select(-Date, -Description, -Notes, -`Commodity/Currency`, -`Transaction ID`) %>% 
-  left_join(data %>% 
-    group_by(gr) %>% 
-    summarise(
-      `Transaction ID` = `Transaction ID`[!is.na(`Transaction ID`)][1],
-      Date = Date[!is.na(Date)][1],
-      Description = Description[!is.na(Description)][1],
-      Notes = Notes[!is.na(Notes)][1],
-      `Commodity/Currency` = `Commodity/Currency`[!is.na(`Commodity/Currency`)][1]),
-  by = "gr") %>% 
-  mutate(transaction_id_augmented = paste(`Transaction ID`, movement_tipe, sep = "_"))
+# Metadatos de cuentas
+# TODO: Es posible que la commodity no sea una divisa (caso de que tengas stock)
+cuentas <- xml_find_all(book, ".//gnc:account", ns)  %>% 
+  imap_dfr(~tibble(id = xml_find_first(.x, "./act:id", ns) %>% xml_text(),
+                   nombre = xml_find_first(.x, "./act:name", ns) %>% xml_text(),
+                   tipo = xml_find_first(.x, "./act:type", ns) %>% xml_text(),
+                   descripcion = xml_find_first(.x, "./act:description", ns) %>% xml_text(),
+                   divisa = xml_find_first(.x, "./act:commodity/cmdty:id", ns) %>% xml_text(),
+                   minimo_valor_invertible = 1/(xml_find_first(.x, "./act:commodity-scu", ns) %>% xml_text() %>% as.numeric()),
+                   padre = xml_find_first(.x, "./act:parent", ns) %>% xml_text(),
+  ))
 
-# Eliminar errores
-# TODO: Faltan a veces datos (en prestamos falta uno de -50), otras veces sobran, en otros faltan cosas...
-data <- data %>% 
-  filter(`Transaction ID` != "53ad435926464f4ab04faeaedb968341")
+find_parents <- function(my_id) {
+  c <- cuentas %>% 
+    filter(id == my_id) 
+  if(nrow(c) == 0) return(NA)
+  if (c$nombre == "Root Account") return(c)
+  return(c %>% bind_rows(find_parents(c$padre)))
+}
 
-# Buscamos y quitamos repetidos (en varios archivos diferentes)
-data <- data %>% 
-  group_by(transaction_id_augmented) %>% 
-  summarise(across(everything(), ~ nth(.x, which(last_date == min(last_date)))))
+# Datos de transacciones
+# TODO: Que haces si hay más de 2 cuentas que intervengan en la transacción?
+transacciones <- xml_find_all(book, "./gnc:transaction", ns) %>% 
+  imap_dfr(~ {
+    transacccion <- tibble(
+      id_transaccion = xml_find_first(.x, "./trn:id", ns) %>% xml_text(),
+      fecha_transacion = xml_find_first(.x, "./trn:date-posted/ts:date", ns) %>% xml_text() %>% ymd_hms(),
+      fecha_creada = xml_find_first(.x, "./trn:date-entered/ts:date", ns) %>% xml_text() %>% ymd_hms(),
+      descripcion = xml_find_first(.x, "./trn:description", ns) %>% xml_text(),
+      notas = xml_find_first(.x, './trn:slots/slot/slot:key[text()="notes"]/following-sibling::slot:value') %>% xml_text(),
+      num_splits = xml_find_all(.x, "./trn:splits", ns) %>% xml_children() %>% length()
+    )
+    splits <- xml_find_all(.x, "./trn:splits/trn:split", ns)
+    cuentas_afectadas <- map_dfr(splits, ~
+                                   tibble(
+                                     id_split = xml_find_first(.x, "./split:id", ns) %>% xml_text(),
+                                     reconciliada = xml_find_first(.x, "./split:reconciled-state", ns) %>% xml_text(),
+                                     valor = xml_find_first(.x, "./split:value", ns) %>% xml_text(),
+                                     cantidad = xml_find_first(.x, "./split:quantity", ns) %>% xml_text(),
+                                     id_cuenta = xml_find_first(.x, "./split:account", ns) %>% xml_text()
+                                   ))
+    transacccion %>% 
+      full_join(cuentas_afectadas, by = character())
+  }) 
 
-# Hierarquia de cuentas
-data <- data %>% 
-  mutate(account_list = str_split(`Full Account Name`, ":"),
-         base_account = map_chr(account_list, ~ .x[1]))
+# Sacar cuentas basicas
+transacciones <- transacciones %>% 
+  mutate(lista_cuentas = map(id_cuenta, ~ {
+    p <- find_parents(.x)
+    p$nombre
+  }),
+  cuenta_base = map_chr(lista_cuentas, ~.x[length(.x)-1])
+  ) 
 
-# Varibles útiles
-data <- data %>% 
-  mutate(year = year(Date),
-         month = month(Date, label = TRUE))
-
+# Calcular valores reales
+transacciones <- transacciones %>% 
+  mutate(valor = (Vectorize(function(.x) eval(parse(text=.x))))(valor),
+         cantidad = (Vectorize(function(.x) eval(parse(text=.x))))(cantidad)) %>% 
+  mutate(mes = month(fecha_transacion, label = TRUE),
+         año = year(fecha_transacion))
 
 
 ## ----------------------------------
 ## ------------ Análisis ------------
 ## ----------------------------------
 
+my_font <- list(
+  family = "Myriad Pro"
+)
+
 # Gastos - Ingresos por mes (lineas)
-gg <- ggplot(data %>% 
-  filter(base_account %in% c("Ingresos", "Gastos")) %>% 
-  group_by(month, base_account) %>% 
-  summarise(value = sum(`Amount Num`, na.rm = TRUE)),
-  aes(month, abs(value), col = base_account, group = base_account)) +
-  geom_line() +
-  geom_point()
-ggplotly(gg)
+pal <- c("#e34a33", "#a1d99b")
+plot_ly(data = transacciones %>% 
+  filter(cuenta_base %in% c("Ingresos", "Gastos")) %>% 
+  group_by(mes, cuenta_base) %>% 
+  summarise(valor = sum(valor)),
+  x = ~mes, y = ~abs(valor), color = ~cuenta_base,
+  type = "scatter", mode = "line+dots", colors = pal
+) %>% 
+  plotly::layout(title = 'Perdidas y ganancias',
+                 font = my_font,
+                 xaxis = list(title = "Mes"),
+                 yaxis = list(title = "Euros",
+                              rangemode = "tozero"))
+
+# Movimiento total diario
+plot_ly(data = transacciones %>% 
+          filter(cuenta_base %in% c("Activo", "Pasivo")) %>% 
+          arrange(fecha_transacion) %>% 
+          mutate(valor = cumsum(valor)),
+        x = ~fecha_transacion, y = ~valor, 
+        type = "scatter", mode = "line+dots", colors = pal
+) %>% 
+  plotly::layout(title = 'Pasta',
+                 font = my_font,
+                 xaxis = list(title = ""),
+                 yaxis = list(title = "Euros",
+                              rangemode = "tozero"))
+
+
+# Movimiento ingresos gastos diario (tendencia total)
+plot_ly(data = transacciones %>% 
+          filter(cuenta_base %in% c("Ingresos", "Gastos")) %>% 
+          arrange(fecha_transacion) %>% 
+          mutate(valor = cumsum(valor)),
+        x = ~fecha_transacion, y = ~valor, 
+        type = "scatter", mode = "line+dots", colors = pal
+) %>% 
+  plotly::layout(title = 'Pasta',
+                 font = my_font,
+                 xaxis = list(title = ""),
+                 yaxis = list(title = "Euros",
+                              rangemode = "tozero"))
 
 
 # Desglose de gastos (barras)
-gg <- ggplot(data %>% 
-  filter(base_account =="Gastos") %>% 
-  mutate(second_level_account = map_chr(account_list, ~ .x[2])) %>% 
-  group_by(month, second_level_account) %>% 
-  summarise(value = sum(`Amount Num`)),
-  aes(month, value, fill = second_level_account)) +
-  geom_bar(stat = "identity")
-ggplotly(gg)  
+plot_ly(data = transacciones %>% 
+  filter(cuenta_base == "Gastos") %>% 
+  mutate(cuenta_segundo_nivel = map_chr(lista_cuentas, ~.x[length(.x)-2])) %>% 
+  group_by(mes, cuenta_segundo_nivel) %>% 
+  summarise(valor = sum(valor)),
+  x = ~mes, y = ~valor, color = ~cuenta_segundo_nivel,
+  type = "bar"
+  ) %>% 
+  plotly::layout(barmode = "stack")
+
+
+
+  
 
 # Desglose comida ultimo més (tarta) o ultimos meses
-# Interactivo...
-fig <- plot_ly(data %>% 
-                 filter(base_account =="Gastos", 
-                        # month == max(month)
-                        month > "mar"
-                        ) %>% 
-                 mutate(whatever_account = map_chr(account_list, ~ ifelse(!is.na(.x[3]), .x[3], .x[2]))) %>% 
-                 group_by(month, whatever_account) %>% 
-                 summarise(value = sum(`Amount Num`)), 
-               labels = ~whatever_account, values = ~value, type = 'pie',
-               textposition = 'inside',
-               textinfo = 'value+label+percent',
-               insidetextfont = list(color = '#FFFFFF'),
-               hoverinfo = 'text',
-               text = ~paste('$', value, ' euros'),
-               marker = list(colors = colors,
-                             line = list(color = '#FFFFFF', width = 1)),
-               #The 'pull' attribute can also be used to create space between the sectors
+
+ini_mes <- "abr"
+meses <- levels(transacciones$mes)
+steps <- imap(meses, ~
+      list(args = list(visible = c(rep(FALSE, .y-1), TRUE, rep(FALSE, length(meses)-.y))),
+           method = 'restyle',
+           name = .x,
+           value = .x
+           ))
+data <- transacciones %>% 
+  filter(cuenta_base %in% c("Gastos")) %>% 
+  mutate(cuenta = map_chr(lista_cuentas, ~ifelse(length(.x)>3, .x[length(.x)-3], .x[length(.x)-2]))) %>% 
+  group_by(mes, cuenta) %>% 
+  summarise(valor = sum(valor))
+
+fig <- plot_ly(data, labels = ~cuenta, values = ~valor, 
                showlegend = FALSE)
-fig <- fig %>% plotly::layout(title = paste0('Gastos disgregados para el mes de ', max(data$month), collapse = ""),
-                      xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
-                      yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+
+walk(meses, ~ {
+  fig <<- fig %>% 
+    add_pie(data = data %>% 
+                   filter(mes == .x), 
+            labels = ~cuenta, values = ~valor,
+            # name = .x,
+            visible = ini_mes == .x,
+            textposition = 'inside',
+            textinfo = 'valor+label+percent',
+            insidetextfont = list(color = '#FFFFFF'),
+            marker = list(colors = colors,
+                          line = list(color = '#FFFFFF', width = 1),
+                          text = ~paste(cuenta, '\n', '$', valor, ' euros')),
+            hoverinfo = 'text')
+})
+
+fig <- fig %>% 
+  plotly::layout(title = paste0('Gastos disgregados para el mes de ', ini_mes, collapse = ""),
+                 xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+                 yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+                 sliders = list(
+                   list(
+                     active = ini_mes, 
+                     currentvalue = list(prefix = "Mes: "), 
+                     steps = steps))
+                 )
 fig
 
 # Balance
-data %>% 
-  filter(base_account %in% c("Activo", "Pasivo")) %>% 
-  group_by(`Full Account Name`) %>% 
-  summarise(`Account Name` = first(`Account Name`), 
-            value = sum(`Amount Num`, na.rm = TRUE))
+transacciones %>% 
+  filter(cuenta_base %in% c("Activo", "Pasivo")) %>% 
+  mutate(nombre_completo = map(unlist(lista_cuentas), ~paste0(.x, collapse = ":"))) %>% .$nombre_completo
+  group_by(nombre_completo) %>% 
+    summarise(valor = sum(valor))
+
