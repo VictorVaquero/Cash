@@ -1,3 +1,25 @@
+# Preparar cache
+# TODO: Realmente es saltarme el uso de un bbdd
+cache_memory <- cachem::cache_mem(max_size = 100 * 1024^2)
+
+
+#' Get latest xml file
+#'
+#' @return tibble
+#' @export
+#'
+#' @examples get_latest_xml()
+get_latest_xml <- function(file_list, file_type) {
+  # TODO: Ahora solo el último, checkear consistencia
+  latest_file <- file_list %>%
+    filter(
+      type == file_type,
+      last_date == max(last_date)
+    )
+  return(latest_file)
+}
+
+
 #' Read xml cash file
 #'
 #' @param file
@@ -35,9 +57,16 @@ get_books <- function(xml_root_node) {
 #' @examples get_book_metadata(book)
 get_book_metadata <- function(xml_book) {
   tribble(
-    ~Dato,
-    ~Valor,
-    ~Descripcion,
+    ~Dato,    ~Valor,    ~Descripcion,
+
+    "Fecha ini",
+    xml2::xml_find_all(xml_book, ".//ts:date") %>% xml2::xml_text() %>% lubridate::ymd_hms() %>% min() %>% lubridate::format_ISO8601(),
+    "Primera fecha disponible",
+
+    "Fecha fin",
+    xml2::xml_find_all(xml_book, ".//ts:date") %>% xml2::xml_text() %>% lubridate::ymd_hms() %>% max() %>% lubridate::format_ISO8601(),
+    "Última fecha disponible",
+
     "Dinero",
     xml2::xml_find_all(xml_book, './gnc:count-data[@cd:type="commodity"]') %>% xml2::xml_text(.),
     "Numero de monedas usadas",
@@ -87,19 +116,55 @@ get_book_accounts <- function(xml_book) {
   ns <- xml2::xml_ns(xml_book)
 
   # TODO: Es posible que la commodity no sea una divisa (caso de que tengas stock)
-  xml_find_all(xml_book, ".//gnc:account", ns) %>%
+  # TODO: Estaria bien hacerlo de tal forma que no sean todas extricatamente necesarias
+  accounts <- xml_find_all(xml_book, ".//gnc:account", ns) %>%
     purrr::imap_dfr(
-      ~ tibble(
+      ~ dplyr::tibble(
         id = xml_find_first(.x, "./act:id", ns) %>% xml_text(),
         nombre = xml_find_first(.x, "./act:name", ns) %>% xml_text(),
         tipo = xml_find_first(.x, "./act:type", ns) %>% xml_text(),
-        descripcion = xml_find_first(.x, "./act:description", ns) %>% xml_text(),
+        descripcion_cuenta = xml_find_first(.x, "./act:description", ns) %>% xml_text(),
         divisa = xml_find_first(.x, "./act:commodity/cmdty:id", ns) %>% xml_text(),
         minimo_valor_invertible = 1 / (
           xml_find_first(.x, "./act:commodity-scu", ns) %>% xml_text() %>% as.numeric()
         ),
         padre = xml_find_first(.x, "./act:parent", ns) %>% xml_text(),
       )
+    )
+
+  return(accounts)
+}
+get_book_accounts <- get_book_accounts %>%
+  memoise::memoise(., cache = cache_memory,
+                   hash = function(.x)
+                     rlang::hash(xml2::xml_find_all(.x[[2]], ".//*[local-name() = 'id']") %>%
+                                                     xml2::xml_text()))
+
+
+
+#' Get parents and add their names
+#'
+#' @param accounts
+#'
+#' @return
+#' @export
+#'
+#' @examples
+get_parents_list <- function(accounts) {
+  accounts %>%
+    dplyr::mutate(
+      lista_cuentas_ids = purrr::map(id, ~ {
+        p <- find_parents(.x, accounts)
+        if(any(!is.na(p))) return(p$id)
+        else NA_character_
+      }),
+      # TODO: Mejorar esto
+      lista_cuentas = purrr::map(id, ~ {
+        p <- find_parents(.x, accounts)
+        if(any(!is.na(p))) return(p$nombre)
+        else NA_character_
+      }),
+      cuenta_base = purrr::map_chr(lista_cuentas, ~ .x[max(1,length(.x) - 1)])
     )
 }
 
@@ -113,15 +178,30 @@ get_book_accounts <- function(xml_book) {
 #'
 #' @examples
 find_parents <- function(my_id, accounts) {
+  stopifnot(is.character(my_id))
+  stopifnot("tbl" %in% class(accounts))
+
   c <- accounts %>%
     filter(id == my_id)
   if (nrow(c) == 0) {
     return(NA)
   }
-  if (c$nombre == "Root Account") {
+  if (nrow(c) > 1) {
+    c <- c %>% head(n = 1)
+    message("...Warning, repeated accounts IDs, using first one")
+  }
+  if (c$tipo == "ROOT" | is.na(c$padre)) {
     return(c)
   }
-  return(c %>% bind_rows(find_parents(c$padre, accounts)))
+
+  p <- find_parents(c$padre, accounts)
+
+  if (identical(p, NA)) {
+    message("...Warning, unknown parent ID")
+    return(c)
+  }
+
+  return(c %>% bind_rows(p))
 }
 
 
@@ -145,7 +225,7 @@ get_book_transactions <- function(xml_book, accounts) {
         id_transaccion = xml_find_first(.x, "./trn:id", ns) %>% xml_text(),
         fecha_transacion = xml_find_first(.x, "./trn:date-posted/ts:date", ns) %>% xml_text() %>% lubridate::ymd_hms(),
         fecha_creada = xml_find_first(.x, "./trn:date-entered/ts:date", ns) %>% xml_text() %>% lubridate::ymd_hms(),
-        descripcion = xml_find_first(.x, "./trn:description", ns) %>% xml_text(),
+        descripcion_transaccion = xml_find_first(.x, "./trn:description", ns) %>% xml_text(),
         notas = xml_find_first(
           .x,
           './trn:slots/slot/slot:key[text()="notes"]/following-sibling::slot:value'
@@ -153,7 +233,7 @@ get_book_transactions <- function(xml_book, accounts) {
         num_splits = xml_find_all(.x, "./trn:splits", ns) %>% xml_children() %>% length()
       )
       splits <- xml_find_all(.x, "./trn:splits/trn:split", ns)
-      cuentas_afectadas <- map_dfr(
+      cuentas_afectadas <- purrr::map_dfr(
         splits,
         ~
           tibble(
@@ -169,14 +249,17 @@ get_book_transactions <- function(xml_book, accounts) {
     })
 
   # Sacar cuentas basicas
+  # TODO: Arregla calculando padres previo cuentas, es estupido sino
+  # transacciones <- transacciones %>%
+  #   mutate(
+  #     lista_cuentas = purrr::map(id_cuenta, ~ {
+  #       p <- find_parents(.x, accounts)
+  #       p$nombre
+  #     }),
+  #     cuenta_base = purrr::map_chr(lista_cuentas, ~ .x[length(.x) - 1])
+  #   )
   transacciones <- transacciones %>%
-    mutate(
-      lista_cuentas = purrr::map(id_cuenta, ~ {
-        p <- find_parents(.x, accounts)
-        p$nombre
-      }),
-      cuenta_base = purrr::map_chr(lista_cuentas, ~ .x[length(.x) - 1])
-    )
+    left_join(accounts, by = c("id_cuenta" = "id"))
 
   # Calcular valores reales
   transacciones <- transacciones %>%
@@ -193,7 +276,16 @@ get_book_transactions <- function(xml_book, accounts) {
       }))(cantidad)
     ) %>%
     mutate(
-      mes = lubridate::month(fecha_transacion, label = TRUE),
+      mes = lubridate::month(fecha_transacion, label = TRUE, abbr = FALSE),
       año = lubridate::year(fecha_transacion)
     )
 }
+get_book_transactions <- get_book_transactions %>%
+  memoise::memoise(., cache = cache_memory,
+                   hash = function(.x)
+                     rlang::hash(
+                     list(
+                      xml2::xml_find_all(.x$xml_book, ".//*[local-name() = 'id']") %>%
+                                     xml2::xml_text(),
+                       .x$accounts
+                     )))
