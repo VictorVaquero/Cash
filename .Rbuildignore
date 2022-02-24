@@ -5,3 +5,7 @@
 ^LICENSE\.md$
 ^data-raw$
 ^README\.Rmd$
+^app\.R$
+^rsconnect$
+^Dockerfile$
+^\.dockerignore$

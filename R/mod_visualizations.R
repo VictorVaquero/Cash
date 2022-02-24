@@ -13,43 +13,161 @@ mod_visualizations_ui <- function(id){
     tags$div(
       class = "row",
       tags$div(
-        class = "col-12 card-deck",
-        customCard(
-          title = tags$h5(tags$span(class = "text-success", "Ingresos"), " y ", tags$span(class = "text-danger", "Gastos")),
-          content = plotly::plotlyOutput(ns("global_income_loss_plot"))),
-        customCard(
-          tags$h5("Movimiento diario"),
-          content = plotly::plotlyOutput(ns("daily_movement_plot"))),
-        customCard(
-          title = tags$div(class = "d-flex align-items-center",
-                           tags$h5(class = "mr-auto mb-0", tags$span(class = "text-success", "Ganancias"), " o ", tags$span(class = "text-danger", "Perdidas")),
-                           tags$button(class="btn btn-outline-primary action-button shiny-bound-input", id = ns("bar_line_daily_movement_button"), "Bar/Line")
-                           ),
-          content = plotly::plotlyOutput(ns("daily_total_movement_plot")))
+        class = "col-6",
+        tags$div(
+          class = "card-deck",
+          customKPI(
+            title = "Ganancias",
+            shiny::textOutput(ns("total_money_kpi"),
+                              inline = TRUE),
+            color = "text-success", # TODO: Fix...
+            font_size = "text-2"
+          ),
+          customKPI(
+            title = "Ingresos",
+            shiny::textOutput(ns("won_money_kpi"),  inline = TRUE),
+            color = "text-success",
+            font_size = "text-2"
+          ),
+          customKPI(
+            title = "Gastos",
+            shiny::textOutput(ns("loss_money_kpi"),
+                              inline = TRUE),
+            color = "text-danger",
+            font_size = "text-2"
+          )
+        )
+      ),
+      tags$div(
+        class = "col-6",
+        tags$div(
+          class = "card-deck",
+          customKPI(
+            title = "Activo",
+            shiny::textOutput(ns("accounts_total_kpi"), inline = TRUE),
+            color = "text-white",
+            font_size = "text-2"
+          ),
+          customKPI(
+            title = "Corriente",
+            shiny::textOutput(ns("accounts_checking_kpi"),  inline = TRUE),
+            color = "text-white",
+            font_size = "text-2"
+          ),
+          customKPI(
+            title = "Ahorros",
+            shiny::textOutput(ns("accounts_savings_kpi"), inline = TRUE),
+            color = "text-white",
+            font_size = "text-2"
+          )
+        )
       )
     ),
     tags$div(
       class = "row mt-3",
       tags$div(
-        class = "col-12 card-deck",
+        class = "col-12",
+        tags$div(
+          class = "card-deck",
+          customCard(
+            title = tags$h5(tags$span(class = "text-success", "Ingresos"), " y ", tags$span(class = "text-danger", "Gastos")),
+            content = plotly::plotlyOutput(ns("global_income_loss_plot"), height = VISUALIZATION_HEIGHT)),
+          customCard(
+            tags$h5("Movimiento diario"),
+            content = plotly::plotlyOutput(ns("daily_movement_plot"), height = VISUALIZATION_HEIGHT))
+        )
+      )
+    ),
+    tags$div(
+      class = "row mt-3",
+      tags$div(
+        class = "col-4",
+        tags$div(
+          class = "row",
+          tags$div(
+            class = "col-12",
+            tags$div(
+              class = "card-deck",
+              customKPI(
+                title = "Ahorro este mes",
+                shiny::textOutput(ns("savings_1_kpi"),  inline = TRUE),
+                font_size = "text-2"
+              ),
+              customKPI(
+                title = "Ahorro medio (3 meses)",
+                shiny::textOutput(ns("savings_3_kpi"),  inline = TRUE),
+                font_size = "text-2"
+              )
+            )
+          )
+        ),
+        tags$div(
+          class = "row mt-3",
+          tags$div(
+            class = "col-12",
+            tags$div(
+              class = "card-deck",
+              customKPI(
+                title = "Ahorro medio (6 meses)",
+                shiny::textOutput(ns("savings_6_kpi"),  inline = TRUE),
+                font_size = "text-2"
+              ),
+              customKPI(
+                title = "Ahorro medio (1 año)",
+                shiny::textOutput(ns("savings_year_kpi"),  inline = TRUE),
+                font_size = "text-2"
+              )
+            )
+          )
+        ),
+        tags$div(
+          class = "row mt-3",
+          tags$div(
+            class = "col-12",
+            tags$div(
+              class = "card-deck",
+              customKPI(
+                title = "Ahorro medio (total)",
+                shiny::textOutput(ns("savings_mean_total_kpi"),  inline = TRUE),
+                font_size = "text-2"
+              )
+            )
+          )
+        )
+      ),
+      tags$div(
+        class = "col-8",
         customCard(
-          # title = tags$p(tags$span(class = "text-success", "Ganancias"), " o ", tags$span(class = "text-danger", "Perdidas")),
-          title = "Desglose mensual",
-          content = plotly::plotlyOutput(ns("expenses_bar_plot"))),
-        customCard(
-          # title = tags$p(tags$span(class = "text-success", "Ganancias"), " o ", tags$span(class = "text-danger", "Perdidas")),
-          content = tags$div(
-            plotly::plotlyOutput(ns("full_pie_plot")),
-            mydateInput(ns("date_expenses_variable"), NULL,
-                             value = lubridate::today(),
-                             startview = "month",
-                             language = "es",
-                             min = lubridate::ymd("2021-03-01"),
-                             max = lubridate::today(),
-                             # autoclose = TRUE, # TODO: this
-                             minviewmode = "months"
-                             )
+          title = tags$div(class = "d-flex align-items-center",
+                           tags$h5(class = "mr-auto mb-0", tags$span(class = "text-success", "Ganancias"), " o ", tags$span(class = "text-danger", "Perdidas")),
+                           tags$button(class="btn btn-outline-primary action-button shiny-bound-input", id = ns("bar_line_daily_movement_button"), "Bar/Line")
+          ),
+          content = plotly::plotlyOutput(ns("daily_total_movement_plot"), height = 240))
+      )
+    ),
+    tags$div(
+      class = "row mt-3",
+      tags$div(
+        class = "col-12",
+        tags$div(
+          class = "card-deck",
+          customCard(
+            title = "Desglose mensual",
+            content = plotly::plotlyOutput(ns("expenses_bar_plot"), height = VISUALIZATION_HEIGHT)),
+          customCard(
+            content = tags$div(
+              plotly::plotlyOutput(ns("full_pie_plot"), height = VISUALIZATION_HEIGHT),
+              mydateInput(ns("date_expenses_variable"), NULL,
+                          value = lubridate::today(),
+                          startview = "month",
+                          language = "es",
+                          min = lubridate::ymd("2021-03-01"),
+                          max = lubridate::today(),
+                          # autoclose = TRUE, # TODO: this
+                          minviewmode = "months"
+              )
             ))
+        )
       )
     )
 
@@ -59,7 +177,7 @@ mod_visualizations_ui <- function(id){
 #' Visualizations Server Functions
 #'
 #' @noRd
-mod_visualizations_server <- function(id, book, accounts){
+mod_visualizations_server <- function(id, book, accounts, transactions){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
 
@@ -69,12 +187,7 @@ mod_visualizations_server <- function(id, book, accounts){
       date_expenses_variable = lubridate::month(lubridate::today(), label = TRUE, abbr = FALSE)
     )
 
-    transactions <- reactive({
-      message(".....load transactions")
-      get_book_transactions(book(), accounts())
-    })
-
-    ## ------ Logica
+    ## ------ Logic
 
     # Setters
     shiny::observeEvent(input$bar_line_daily_movement_button, {
@@ -90,6 +203,66 @@ mod_visualizations_server <- function(id, book, accounts){
     })
 
     ## ---- Visualizations
+
+    output$total_money_kpi <- shiny::renderText({
+      message(".....render income visualization - total money kpi")
+      global_summary_data(transactions()) %>%
+        pull(total)
+    })
+    output$won_money_kpi <- shiny::renderText({
+      message(".....render income visualization - won money kpi")
+      global_summary_data(transactions()) %>%
+        pull(won)
+    })
+    output$loss_money_kpi <- shiny::renderText({
+      message(".....render income visualization - loss money kpi")
+      global_summary_data(transactions()) %>%
+        pull(loss)
+    })
+
+    output$savings_1_kpi <- shiny::renderText({
+      message(".....render savings visualization - 1 months kpi")
+      global_summary_savings(transactions()) %>%
+        pull(actual)
+    })
+    output$savings_3_kpi <- shiny::renderText({
+      message(".....render savings visualization - 3 months kpi")
+      global_summary_savings(transactions()) %>%
+        pull(months_3)
+    })
+    output$savings_6_kpi <- shiny::renderText({
+      message(".....render savings visualization - 6 months kpi")
+      global_summary_savings(transactions()) %>%
+        pull(months_6)
+    })
+    output$savings_year_kpi <- shiny::renderText({
+      message(".....render savings visualization - 1 year kpi")
+      global_summary_savings(transactions()) %>%
+        pull(year)
+    })
+    output$savings_mean_total_kpi <- shiny::renderText({
+      message(".....render savings visualization - mean total kpi")
+      global_summary_savings(transactions()) %>%
+        pull(total)
+    })
+
+    output$accounts_total_kpi <- shiny::renderText({
+      message(".....render accounts visualization - total kpi")
+      global_summary_accounts(transactions()) %>%
+        pull(total)
+    })
+    output$accounts_checking_kpi <- shiny::renderText({
+      message(".....render accounts visualization - checking kpi")
+      global_summary_accounts(transactions()) %>%
+        pull(checking)
+    })
+    output$accounts_savings_kpi <- shiny::renderText({
+      message(".....render accounts visualization - savings kpi")
+      global_summary_accounts(transactions()) %>%
+        pull(savings)
+    })
+
+
     output$global_income_loss_plot <- plotly::renderPlotly({
       message(".....render global income loss plot!")
       global_income_loss_plot(transactions())
@@ -124,19 +297,78 @@ mod_visualizations_server <- function(id, book, accounts){
   })
 }
 
-
+# summarize
+f <- function(.x) glue::glue("{format(round(.x), big.mark = ' ')} €")
+global_summary_data <- function(transactions) {
+  total <- transactions %>%
+    dplyr::filter(cuenta_base %in% c("Ingresos", "Gastos")) %>%
+    dplyr::summarise(valor = f(-sum(valor))) %>%
+    dplyr::pull(valor)
+  won <- transactions %>%
+    dplyr::filter(cuenta_base %in% c("Ingresos")) %>%
+    dplyr::summarise(valor = f(-sum(valor))) %>%
+    dplyr::pull(valor)
+  loss <- transactions %>%
+    dplyr::filter(cuenta_base %in% c("Gastos")) %>%
+    dplyr::summarise(valor = f(sum(valor))) %>%
+    dplyr::pull(valor)
+  return(dplyr::tibble(total = total, won = won, loss = loss))
+}
+global_summary_savings <- function(transactions) {
+  d <- transactions %>%
+    dplyr::pull(fecha_transacion) %>%
+    max(.)
+  aux <- function(.x) {
+    transactions %>%
+      dplyr::filter(
+        fecha_transacion < lubridate::floor_date(d, unit = "months"),
+        fecha_transacion >= lubridate::ceiling_date(d - lubridate::dmonths(.x+1), unit = "months")) %>%
+      dplyr::filter(cuenta_base %in% c("Ingresos", "Gastos")) %>%
+      dplyr::mutate(mes_ano = fecha_transacion %>% format(format="01-%m-%Y") %>% lubridate::dmy()) %>%
+      dplyr::group_by(mes_ano) %>%
+      dplyr::summarise(valor = sum(valor), groups = "drop") %>%
+      dplyr::summarise(valor = f(-mean(valor))) %>%
+      dplyr::pull(valor)
+  }
+  return(dplyr::tibble(
+    actual = transactions %>%
+      dplyr::filter(cuenta_base %in% c("Ingresos", "Gastos")) %>%
+      dplyr::filter(fecha_transacion >= lubridate::floor_date(d, unit = "months")) %>%
+      dplyr::summarise(valor = f(-sum(valor))) %>%
+      dplyr::pull(valor),
+    months_3 = aux(3),
+    months_6 = aux(6),
+    year = aux(12),
+    total = aux(10000)))
+}
+global_summary_accounts <- function(transactions) {
+  checking <- transactions %>%
+    dplyr::filter(id_cuenta == "72e91c5a554447f58c68c39b3686cd92") %>%
+    dplyr::summarise(valor = f(sum(valor))) %>%
+    dplyr::pull(valor)
+  savings <- transactions %>%
+    dplyr::filter(id_cuenta == "25b7f28063e14853b8171188703ab493") %>%
+    dplyr::summarise(valor = f(sum(valor))) %>%
+    dplyr::pull(valor)
+  total <- transactions %>%
+    dplyr::filter(cuenta_base == "Activo") %>%
+    dplyr::summarise(valor = f(sum(valor))) %>%
+    dplyr::pull(valor)
+  return(dplyr::tibble(total=total, checking = checking, savings = savings))
+}
 
 
 # Gastos - Ingresos por mes (lineas)
 global_income_loss_plot <- function(transactions) {
   data <- transactions %>%
     dplyr::filter(cuenta_base %in% c("Ingresos", "Gastos")) %>%
-    dplyr::group_by(mes, cuenta_base) %>%
+    dplyr::mutate(mes_ano = fecha_transacion %>% format(format="01-%m-%Y") %>% lubridate::dmy()) %>%
+    dplyr::group_by(mes_ano, cuenta_base) %>%
     dplyr::summarise(valor = sum(valor))
 
   plotly::plot_ly(
     data = data,
-    x = ~mes,
+    x = ~mes_ano,
     y = ~ abs(valor),
     color = ~cuenta_base,
     type = "scatter",
@@ -145,7 +377,7 @@ global_income_loss_plot <- function(transactions) {
   ) %>%
     plotly::add_trace(
       data = data,
-      x = ~mes,
+      x = ~mes_ano,
       y = ~ abs(valor),
       color = ~cuenta_base,
       type = "scatter",
@@ -305,14 +537,15 @@ monthly_movement_total_plot <- function(transactions) {
   data <- transactions %>%
     filter(cuenta_base %in% c("Ingresos", "Gastos")) %>%
     arrange(fecha_transacion) %>%
-    group_by(mes) %>%
+    dplyr::mutate(mes_ano = fecha_transacion %>% format(format="01-%m-%Y") %>% lubridate::dmy()) %>%
+    group_by(mes_ano) %>%
     summarise(
       valor = sum(-valor),
       sign = factor(sign(valor)),
       color = setNames(my_palette(2), c(-1, 1))[sign]
     ) %>%
-    arrange(mes) %>%
-    group_by(mes)
+    arrange(mes_ano) %>%
+    group_by(mes_ano)
 
   palette <- setNames(my_palette(2), c(-1, 1)) %>%
     purrr::map_chr(~glue::glue({.x}, "66"))
@@ -320,21 +553,21 @@ monthly_movement_total_plot <- function(transactions) {
   plotly::plot_ly() %>%
     plotly::add_bars(
       data = data %>% filter(sign==-1),
-      x = ~mes,
+      x = ~mes_ano,
       y = ~valor,
       marker = list(
         color = palette["-1"],
         line = list(color = my_palette(2)[1],
-                    opacity = 1, width = 5))
+                    opacity = 1, width = 3))
     ) %>%
     plotly::add_bars(
       data = data %>% filter(sign==1),
-      x = ~mes,
+      x = ~mes_ano,
       y = ~valor,
       marker = list(
         color = palette["1"],
         line = list(color = my_palette(2)[2],
-                    opacity = 1, width = 5))
+                    opacity = 1, width = 3))
     ) %>%
     hline(y = mean(data$valor), color = "white", dash = "dash") %>% # TODO: Darle un hover a esto
     plotly::layout(
@@ -359,12 +592,13 @@ expenses_bar_plot <- function(transacciones) {
                   cuenta_segundo_nivel = dplyr::if_else(cuenta_segundo_nivel == "Otros gastos",
                                                         purrr::map_chr(lista_cuentas, ~ .x[1]),
                                                         cuenta_segundo_nivel)) %>%
-    dplyr::group_by(mes, cuenta_segundo_nivel) %>%
+    dplyr::mutate(mes_ano = fecha_transacion %>% format(format="01-%m-%Y") %>% lubridate::dmy()) %>%
+    dplyr::group_by(mes_ano, cuenta_segundo_nivel) %>%
     dplyr::summarise(valor = sum(valor))
 
   plotly::plot_ly(
     data = data,
-    x = ~mes,
+    x = ~mes_ano,
     y = ~valor,
     color = ~cuenta_segundo_nivel,
     colors = my_palette(9),

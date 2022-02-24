@@ -18,7 +18,10 @@ my_plotly_theme <- function(pt) {
         color = "rgb(256, 256, 256)",
         gridcolor = "rgba(256, 256, 256, 0.5)"
       ),
-      legend = list(font = list(color = "#FFFFFF"))
+      legend = list(font = list(color = "#FFFFFF")),
+      margin = list(
+        b = "0"
+      )
     )
 }
 

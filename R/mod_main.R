@@ -22,7 +22,7 @@ mod_main_ui <- function(id) {
           tags$a(class = "navbar-brand", href = "#", 'Cash')
         ),
         tags$div(
-          class = "list-group pl-0 h-100 bg-dark shadow",
+          class = "list-group pl-0 bg-dark",
           id = "list-sidebar",
           sideItem("Portada", "wallet", .active = TRUE),
           sideItem("Metadatos", "book"),
@@ -67,8 +67,8 @@ mod_main_server <- function(id, file_list) {
     ns <- session$ns
 
     metadata_results <- mod_metadata_server("mod_metadata", file_list)
-    transactions <- mod_visualizations_server("mod_visualizations", metadata_results$book, metadata_results$accounts)
-    mod_planification_server("mod_planification", metadata_results$accounts, transactions)
+    mod_visualizations_server("mod_visualizations", metadata_results$book, metadata_results$accounts, metadata_results$transactions)
+    mod_planification_server("mod_planification", metadata_results$accounts, metadata_results$transactions)
 
     output$aux <- renderText({
       paste("AS: ", shiny::getQueryString())

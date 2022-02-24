@@ -42,7 +42,6 @@ file_list <- list_files()
 
 # Lectura de datos (xml)
 # TODO: Ahora solo el último, checkear consistencia
-# TODO: Deberia tambien mirar que fuera el último por la hora...
 latest_file <- file_list %>%
   filter(
     type == "gnca",

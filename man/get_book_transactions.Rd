@@ -4,7 +4,7 @@
 \alias{get_book_transactions}
 \title{Get all of the account transactions}
 \usage{
-get_book_transactions(xml_book, accounts)
+get_book_transactions(...)
 }
 \arguments{
 \item{xml_book}{}

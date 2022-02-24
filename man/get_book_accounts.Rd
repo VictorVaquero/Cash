@@ -4,7 +4,7 @@
 \alias{get_book_accounts}
 \title{Get a list of the book accounts}
 \usage{
-get_book_accounts(xml_book)
+get_book_accounts(...)
 }
 \arguments{
 \item{xml_book}{}

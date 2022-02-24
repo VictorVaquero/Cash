@@ -5,8 +5,10 @@
 #'
 #' @examples
 cashApp <- function() {
+  # Data files
   file_list <- list_files()
 
+  # Custom css theme
   my_theme <- bslib::bs_theme(version = 4,
                               base_font = bslib::font_google("Fira Sans"),
                               code_font = bslib::font_google("Fira Code"),
@@ -16,6 +18,11 @@ cashApp <- function() {
                   `enable-shadows` = TRUE, `enable-rounded` = TRUE, spacer = "1rem",
                   bootswatch = "darkly")
 
+  # Logging
+  logger::log_threshold(logger::DEBUG)
+  logger::log_appender(logger::appender_tee(glue::glue("{LOGGING_DIR}/{format(Sys.time(),  '%Y%m%d_%H%M%S')}_{LOGGING_FILE}")))
+
+  # Shiny
   ui <- shiny::bootstrapPage(
     theme = my_theme,
     tags$head(htmltools::includeCSS("./inst/app/www/styles.css")),

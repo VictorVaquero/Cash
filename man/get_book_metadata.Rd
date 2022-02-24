@@ -4,7 +4,7 @@
 \alias{get_book_metadata}
 \title{Get an specific book metadata}
 \usage{
-get_book_metadata(xml_book)
+get_book_metadata(...)
 }
 \arguments{
 \item{xml_book}{}

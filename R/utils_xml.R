@@ -1,6 +1,6 @@
 # Preparar cache
 # TODO: Realmente es saltarme el uso de un bbdd
-cache_memory <- cachem::cache_mem(max_size = 100 * 1024^2)
+cache_memory <- cachem::cache_disk(logfile = stdout())
 
 
 #' Get latest xml file
@@ -12,8 +12,9 @@ cache_memory <- cachem::cache_mem(max_size = 100 * 1024^2)
 get_latest_xml <- function(file_list, file_type) {
   # TODO: Ahora solo el último, checkear consistencia
   latest_file <- file_list %>%
+    filter(type == file_type,
+           is_valid) %>%
     filter(
-      type == file_type,
       last_date == max(last_date)
     )
   return(latest_file)
@@ -47,6 +48,7 @@ get_books <- function(xml_root_node) {
   xml2::xml_find_all(xml_root_node, ".//gnc:book")
 }
 
+# TODO: This should be in a normalized data format, not directly for visualization
 #' Get an specific book metadata
 #'
 #' @param xml_book
@@ -55,16 +57,24 @@ get_books <- function(xml_root_node) {
 #' @export tibble
 #'
 #' @examples get_book_metadata(book)
-get_book_metadata <- function(xml_book) {
+get_book_metadata <- log("get_book_metadata") %decor% function(xml_book) {
   tribble(
     ~Dato,    ~Valor,    ~Descripcion,
 
     "Fecha ini",
-    xml2::xml_find_all(xml_book, ".//ts:date") %>% xml2::xml_text() %>% lubridate::ymd_hms() %>% min() %>% lubridate::format_ISO8601(),
+    xml2::xml_find_all(xml_book, ".//ts:date") %>%
+      xml2::xml_text() %>%
+      lubridate::ymd_hms() %>%
+      min() %>% list(f=.) %>%
+      glue::glue_data("{lubridate::day(f)} de {lubridate::month(f, label = TRUE, abbr = FALSE)} de {lubridate::year(f)}"),
     "Primera fecha disponible",
 
     "Fecha fin",
-    xml2::xml_find_all(xml_book, ".//ts:date") %>% xml2::xml_text() %>% lubridate::ymd_hms() %>% max() %>% lubridate::format_ISO8601(),
+    xml2::xml_find_all(xml_book, ".//ts:date") %>%
+      xml2::xml_text() %>%
+      lubridate::ymd_hms() %>%
+      max() %>% list(f=.) %>%
+      glue::glue_data("{lubridate::day(f)} de {lubridate::month(f, label = TRUE, abbr = FALSE)} de {lubridate::year(f)}"),
     "Última fecha disponible",
 
     "Dinero",
@@ -112,7 +122,7 @@ get_book_currencies <- function(xml_book) {
 #' @import xml2
 #'
 #' @examples
-get_book_accounts <- function(xml_book) {
+get_book_accounts <- log("get_book_accounts") %decor% function(xml_book) {
   ns <- xml2::xml_ns(xml_book)
 
   # TODO: Es posible que la commodity no sea una divisa (caso de que tengas stock)
@@ -215,7 +225,7 @@ find_parents <- function(my_id, accounts) {
 #' @import xml2
 #'
 #' @examples
-get_book_transactions <- function(xml_book, accounts) {
+get_book_transactions <- log("get_book_transactions") %decor%  function(xml_book, accounts) {
   ns <- xml2::xml_ns(xml_book)
 
   # TODO: Que haces si hay más de 2 cuentas que intervengan en la transacción?
@@ -277,8 +287,10 @@ get_book_transactions <- function(xml_book, accounts) {
     ) %>%
     mutate(
       mes = lubridate::month(fecha_transacion, label = TRUE, abbr = FALSE),
-      año = lubridate::year(fecha_transacion)
+      ano = lubridate::year(fecha_transacion)
     )
+
+  return(transacciones)
 }
 get_book_transactions <- get_book_transactions %>%
   memoise::memoise(., cache = cache_memory,

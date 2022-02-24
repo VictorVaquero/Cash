@@ -18,10 +18,11 @@ GNU_XML_PREFIXES <- '<gnc-v2 xmlns:gnc="http://www.gnucash.org/XML/gnc" xmlns:ac
   xmlns:sx="http://www.gnucash.org/XML/sx" xmlns:bgt="http://www.gnucash.org/XML/bgt"
   xmlns:recurrence="http://www.gnucash.org/XML/recurrence">'
 
+# TODO: Change path here
 test_that("Read xml files", {
   latest_file <- structure(list(
-    path = structure(c(`/home/victor/Escritorio/Cash/inst/extdata/20210721_003525_gnucash_export_Yo.gnca` =
-                         "/home/victor/Escritorio/Cash/inst/extdata/20210721_003525_gnucash_export_Yo.gnca"),
+    path = structure(c(`/home/victor/workspace/Cash/inst/extdata/20210721_003525_gnucash_export_Yo.gnca` =
+                         "/home/victor/workspace/Cash/inst/extdata/20210721_003525_gnucash_export_Yo.gnca"),
                        class = c(
                         "fs_path",
                         "character"

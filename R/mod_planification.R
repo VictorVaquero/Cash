@@ -34,7 +34,7 @@ mod_planification_ui <- function(id, accounts) {
             )
             # tags$button(class = "btn btn-outline-primary action-button shiny-bound-input", id = ns("account_proyection_button"), "TODO")
           ),
-          content = plotly::plotlyOutput(ns("account_proyection_plot"))
+          content = plotly::plotlyOutput(ns("account_proyection_plot"), height = VISUALIZATION_HEIGHT)
         ),
         customCard(
           title = "",
@@ -48,7 +48,7 @@ mod_planification_ui <- function(id, accounts) {
         class = "col-6 card-deck",
         customCard(
           "Gastos en viajes",
-          content = plotly::plotlyOutput(ns("trips_summarized_expenses"))
+          content = plotly::plotlyOutput(ns("trips_summarized_expenses"), height = VISUALIZATION_HEIGHT)
         )
       )
     )
@@ -84,7 +84,7 @@ mod_planification_server <- function(id, accounts, transactions) {
     output$trips_summarized_expenses <- plotly::renderPlotly({
       message(".....trips summarized expenses plot")
 
-      data <- calculate_trips_expenses(transactions())
+      data <- calculate_trips_expenses(transactions(), accounts())
       plot_trips_expenses(data)
     })
   })
@@ -195,7 +195,7 @@ calculate_proyections <- function(transactions, accounts, selected_accounts, .do
   ))
 }
 
-calculate_trips_expenses <- function(transactions) {
+calculate_trips_expenses <- function(transactions, accounts) {
 
   # TODO: Sacar fuera
   mapping_table <- list(
@@ -204,32 +204,49 @@ calculate_trips_expenses <- function(transactions) {
     "Visita Madrid 2021" = tolower(c("Visita madrid 2021", "Viaje madrid 2021")),
     "Camping 2021" = tolower(c("Viaje camping 2021")),
     "Viaje Canarias 2021" = tolower(c("Viaje canarias 2021")),
-    "Barcelona 2021" = tolower(c("Viaje barcelona 2021"))
+    "Barcelona 2021" = tolower(c("Viaje barcelona 2021")),
+    "Viaje Vitoria 2021 2.0" = tolower(c("Viaje Vitoria 5/11/2021")),
+    "Viaje Napoles 2021" = tolower(c("Viaje Napoles 2021")),
+    "Viaje Sur Francia 2021" = tolower(c("Viaje Sur Francia 2021"))
   )
 
+  expenses_accounts <- accounts %>%
+    dplyr::filter(cuenta_base == "Gastos")
+
+  transactions %>%
+   dplyr::filter(nombre == "Viajes") %>%
+   dplyr::pull(notas) %>%
+   purrr::walk(~ {
+     viaje <- .x
+     normalizado <- names(mapping_table)[purrr::map_lgl(mapping_table, ~ any(tolower(viaje) %in% .x))]
+     if (!length(normalizado)) {
+       normalizado <- viaje
+       message(glue::glue("No mapping table for trip - {viaje}"))
+     }
+   })
 
   # TODO: Modif directa en transaciones ?
   data <- transactions %>%
-    dplyr::filter(nombre == "Viajes") %>%
+    dplyr::filter(id_cuenta %in% expenses_accounts$id,
+                  !is.na(notas),
+                  stringr::str_length(notas)>0) %>%
     dplyr::mutate(
       notas =
         purrr::map_chr(notas, ~ {
           viaje <- .x
           normalizado <- names(mapping_table)[purrr::map_lgl(mapping_table, ~ any(tolower(viaje) %in% .x))]
-          if(!length(normalizado)) {
-            normalizado <- viaje
-            message(glue::glue("No mapping table for trip - {viaje}"))
-          }
-
-          return(normalizado)
+          return(ifelse(length(normalizado)>0, normalizado, NA_character_))
         })
-    )
+    ) %>%
+    filter(!is.na(notas), stringr::str_length(notas)>0)
 
   data <- data %>%
     dplyr::group_by(notas) %>%
     dplyr::summarise(
-      valor = sum(valor)
-    )
+      valor = sum(valor),
+      fecha_ini = first(fecha_transacion)
+    ) %>%
+    dplyr::arrange(fecha_ini)
 
   return(data)
 }
@@ -323,10 +340,13 @@ plot_trips_expenses <- function(data) {
       # title = paste0("Gastos disgregados para el mes de ", ini_mes, collapse = ""),
       title = "",
       yaxis = list(
-        title = ""
+        title = "",
+        categoryorder = "array",
+        categoryarray = rev(data$notas)
       ),
       xaxis = list(
         title = "Euros"
+
       ),
       margin = list(
         l = "0"

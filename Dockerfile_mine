@@ -1,0 +1,35 @@
+FROM ubuntu:focal
+
+ENV RENV_VERSION 0.15.1
+
+# Install R
+RUN apt install r-base=3.6.3-2
+
+# Install renv to keep track and install R packages
+# TODO: Check https://environments.rstudio.com/docker https://rstudio.github.io/renv/articles/docker.html
+RUN R -e "install.packages('remotes', repos = c(CRAN = 'https://cloud.r-project.org'))"
+RUN R -e "remotes::install_github('rstudio/renv@${RENV_VERSION}')"
+
+# Ready all directories
+RUN mkdir -p /srv/shiny-server/Cash
+sudo groupadd shiny-apps
+sudo usermod -aG shiny-apps shiny
+sudo chown -R shiny:shiny-apps .
+sudo chmod g+w .
+sudo chmod g+s .
+WORKDIR /srv/shiny-server/Cash
+
+# Install all R packages
+COPY renv.lock renv.lock
+RUN R -e 'renv::restore()'
+
+# Install Rshiny server
+RUN apt install gdebi-core
+RUN wget https://download3.rstudio.org/ubuntu-14.04/x86_64/shiny-server-1.5.17.973-amd64.deb
+RUN gdebi shiny-server-1.5.17.973-amd64.deb
+
+
+# Run server
+USER shiny
+ENTRYPOINT ["opt/shiny-server/bin/shiny-server", "/etc/shiny-server/floating.config"]
+

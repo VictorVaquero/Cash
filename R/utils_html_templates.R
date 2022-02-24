@@ -34,6 +34,41 @@ customCard <- function(title = NA_character_, content) {
   )
 }
 
+#' KPI Card
+#'
+#' @description My custom boostrap kpi card
+#'
+#' @return html
+#'
+#' @import assertthat
+#'
+#' @noRd
+customKPI <- function(title = NA_character_, content, color = "", font_size = "text-3", class = "") {
+  assertthat::assert_that(is.string(title) | class(title) == "shiny.tag")
+  #assertthat::assert_that(is.string(content) | class(content) == "shiny.tag")
+  assertthat::assert_that(is.string(color))
+
+  if(is.character(title) & !identical(title, NA_character_)) t <- tags$p(class = "card-title mb-0 text-light", title)
+  else if (class(title) == "shiny.tag") {
+    t <- tags$div(
+      class = "card-title d-block",
+      title
+    )
+  }
+  else t <- ""
+  tags$div(
+    class = glue::glue("card shadow {class}"),
+    tags$div(
+      class = "card-body pt-2",
+      t,
+      tags$p(
+        class = glue::glue("text-center text-3 mb-0 {color}"),
+        content
+      )
+    )
+  )
+}
+
 
 #' SideItem
 #'

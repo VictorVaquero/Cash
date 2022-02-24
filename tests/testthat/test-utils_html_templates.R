@@ -1,5 +1,5 @@
 test_that("Card works", {
-  my_card <- card("Random title", tags$span("Some content"))
+  my_card <- customCard("Random title", tags$span("Some content"))
   expect_equal(class(my_card), "shiny.tag")
 })
 
