@@ -1,3 +1,6 @@
+#' @include utils_general.R
+
+
 #' Listado y metadatos
 #'
 #' @return tibble

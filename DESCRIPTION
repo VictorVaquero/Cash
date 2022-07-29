@@ -41,3 +41,23 @@ Imports:
     glue,
     pkgload
 Language: es-ES
+Collate: 
+    '__imports.R'
+    '_disable_autoload.R'
+    'app_config.R'
+    'golem_utils_server.R'
+    'golem_utils_ui.R'
+    'utils_general.R'
+    'list_files.R'
+    'mod_main.R'
+    'mod_main_fct_xml.R'
+    'mod_metadata.R'
+    'mod_planification.R'
+    'mod_visualizations.R'
+    'read_cash_csv.R'
+    'read_qif.R'
+    'run_app.R'
+    'utils_html_templates.R'
+    'utils_input_date.R'
+    'utils_visualizations.R'
+    'utils_xml.R'

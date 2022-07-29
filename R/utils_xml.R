@@ -1,3 +1,5 @@
+#' @include utils_general.R
+
 # Preparar cache
 # TODO: Realmente es saltarme el uso de un bbdd
 cache_memory <- cachem::cache_disk(logfile = stdout())
@@ -66,7 +68,8 @@ get_book_metadata <- log("get_book_metadata") %decor% function(xml_book) {
       xml2::xml_text() %>%
       lubridate::ymd_hms() %>%
       min() %>% list(f=.) %>%
-      glue::glue_data("{lubridate::day(f)} de {lubridate::month(f, label = TRUE, abbr = FALSE)} de {lubridate::year(f)}"),
+      glue::glue_data("{lubridate::day(f)} de {lubridate::month(f, label = TRUE, abbr = FALSE)} de {lubridate::year(f)}") %>%
+      as.character(),
     "Primera fecha disponible",
 
     "Fecha fin",
@@ -74,7 +77,8 @@ get_book_metadata <- log("get_book_metadata") %decor% function(xml_book) {
       xml2::xml_text() %>%
       lubridate::ymd_hms() %>%
       max() %>% list(f=.) %>%
-      glue::glue_data("{lubridate::day(f)} de {lubridate::month(f, label = TRUE, abbr = FALSE)} de {lubridate::year(f)}"),
+      glue::glue_data("{lubridate::day(f)} de {lubridate::month(f, label = TRUE, abbr = FALSE)} de {lubridate::year(f)}") %>%
+      as.character(),
     "Última fecha disponible",
 
     "Dinero",
@@ -292,12 +296,12 @@ get_book_transactions <- log("get_book_transactions") %decor%  function(xml_book
 
   return(transacciones)
 }
-get_book_transactions <- get_book_transactions %>%
-  memoise::memoise(., cache = cache_memory,
-                   hash = function(.x)
-                     rlang::hash(
-                     list(
-                      xml2::xml_find_all(.x$xml_book, ".//*[local-name() = 'id']") %>%
-                                     xml2::xml_text(),
-                       .x$accounts
-                     )))
+# get_book_transactions <- get_book_transactions %>%
+#   memoise::memoise(., cache = cache_memory,
+#                    hash = function(.x)
+#                      rlang::hash(
+#                      list(
+#                       xml2::xml_find_all(.x$xml_book, ".//*[local-name() = 'id']") %>%
+#                                      xml2::xml_text(),
+#                        .x$accounts
+#                      )))
